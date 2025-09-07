@@ -1,0 +1,72 @@
+import os
+import cv2
+import threading
+import time
+import numpy as np
+
+# Đường dẫn đến thư mục chứa các bức ảnh
+path = "./images_in"
+
+# Lấy danh sách các tệp tin ảnh trong thư mục
+image_files = [os.path.join(path, f) for f in os.listdir(path) if
+               os.path.isfile(os.path.join(path, f)) and f.endswith(('.png', '.jpg', '.jpeg', '.bmp'))]
+
+def check_duplicate(img_path1, img_path2, duplicates):
+    # Đọc ảnh từ file
+    img1 = cv2.imread(img_path1)
+    img2 = cv2.imread(img_path2)
+
+    # Chuyển ảnh sang độ xám
+    img1_gray = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+    img2_gray = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
+
+    # Resize ảnh cùng kích thước
+    img1_gray_resized = cv2.resize(img1_gray, (img2_gray.shape[1], img2_gray.shape[0]))
+
+    # Tính toán chỉ số SSIM
+    ssim_score = cv2.compareHist(cv2.calcHist([img1_gray_resized], [0], None, [256], [0, 256]),
+                                 cv2.calcHist([img2_gray], [0], None, [256], [0, 256]), cv2.HISTCMP_CORREL)
+
+    # Nếu chỉ số SSIM > 0.95, coi như 2 ảnh giống nhau và thêm vào danh sách duplicates
+    if ssim_score > 0.95:
+        duplicates.append((img_path1, img_path2))
+
+# Tạo các cặp bức ảnh để so sánh
+pairs = []
+for i in range(len(image_files)):
+    for j in range(i + 1, len(image_files)):
+        pairs.append((image_files[i], image_files[j]))
+
+# Sử dụng multithreading để so sánh các cặp ảnh
+duplicates = []
+start_time = time.time()
+
+threads = []
+for pair in pairs:
+    thread = threading.Thread(target=check_duplicate, args=(pair[0], pair[1], duplicates))
+    threads.append(thread)
+    thread.start()
+
+for thread in threads:
+    thread.join()
+#main đợi con đảm bảo chính xác đầy đủ đồng bộ
+end_time = time.time()
+
+# In ra danh sách các bức ảnh trùng lặp
+if duplicates:
+    print("Các bức ảnh trùng lặp:")
+    for dup in duplicates:
+        print(dup[0], dup[1])
+        # Hiển thị hai ảnh trùng lặp
+        img1 = cv2.imread(dup[0])
+        img2 = cv2.imread(dup[1])
+        combined_img = np.hstack((img1, img2))
+        cv2.imshow('Duplicate Images', combined_img)
+        cv2.waitKey(0)
+    cv2.destroyAllWindows()
+else:
+    print("Không có bức ảnh trùng lặp trong thư mục này.")
+
+print("Thời gian thực hiện: ", end_time - start_time)
+
+print("Số lượng thread: ", len(pairs))
